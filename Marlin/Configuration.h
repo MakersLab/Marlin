@@ -684,7 +684,7 @@ const bool Z_MIN_PROBE_ENDSTOP_INVERTING = false; // set to true to invert the l
 
 // default settings
 
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {80.16,80,1066.67,178.45}  // Z: pitch 3mm, 1/16stepping X: 20tooth gt2 pulley 16microstepping
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {80.16,80,1066.67,209.05}  // Z: pitch 3mm, 1/16stepping X: 20tooth gt2 pulley 16microstepping
 #define DEFAULT_MAX_FEEDRATE          {300, 300, 5, 25}    // (mm/sec)
 #define DEFAULT_MAX_ACCELERATION      {1000,500,100,10000}    // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for Skeinforge 40+, for older versions raise them a lot.
 

@@ -496,7 +496,7 @@ const bool Z_MIN_PROBE_ENDSTOP_INVERTING = false; // set to true to invert the l
 #define Z_MIN_POS 0
 #define X_MAX_POS 260
 #define Y_MAX_POS 160
-#define Z_MAX_POS 260
+#define Z_MAX_POS 230
 
 //===========================================================================
 //========================= Filament Runout Sensor ==========================
@@ -684,18 +684,18 @@ const bool Z_MIN_PROBE_ENDSTOP_INVERTING = false; // set to true to invert the l
 
 // default settings
 
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {80.16,80,1066.67,209.05}  // Z: pitch 3mm, 1/16stepping X: 20tooth gt2 pulley 16microstepping
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {80.16,80,1066.67,206.2}  // Z: pitch 3mm, 1/16stepping X: 20tooth gt2 pulley 16microstepping
 #define DEFAULT_MAX_FEEDRATE          {300, 300, 5, 25}    // (mm/sec)
 #define DEFAULT_MAX_ACCELERATION      {1000,500,100,10000}    // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for Skeinforge 40+, for older versions raise them a lot.
 
-#define DEFAULT_ACCELERATION          6000    // X, Y, Z and E acceleration in mm/s^2 for printing moves
+#define DEFAULT_ACCELERATION          800    // X, Y, Z and E acceleration in mm/s^2 for printing moves
 #define DEFAULT_RETRACT_ACCELERATION  3000    // E acceleration in mm/s^2 for retracts
-#define DEFAULT_TRAVEL_ACCELERATION   6000    // X, Y, Z acceleration in mm/s^2 for travel (non printing) moves
+#define DEFAULT_TRAVEL_ACCELERATION   5000    // X, Y, Z acceleration in mm/s^2 for travel (non printing) moves
 
 // The speed change that does not require acceleration (i.e. the software might assume it can be done instantaneously)
-#define DEFAULT_XYJERK                12.0   // (mm/sec)mezi 10 a 30 podle toho, jestli jsou rohy moc kulate -> snizit
-#define DEFAULT_ZJERK                 0.4    // (mm/sec)
-#define DEFAULT_EJERK                 5.0    // (mm/sec)
+#define DEFAULT_XYJERK                5.0   // (mm/sec)mezi 10 a 30 podle toho, jestli jsou rohy moc kulate -> snizit
+#define DEFAULT_ZJERK                 0.3    // (mm/sec)
+#define DEFAULT_EJERK                 4.0    // (mm/sec)
 
 
 //=============================================================================

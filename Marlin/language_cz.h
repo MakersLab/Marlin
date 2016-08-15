@@ -29,7 +29,8 @@
  * Translated by Petr Zahradnik, Computer Laboratory
  * Blog and video blog Zahradnik se bavi
  * http://www.zahradniksebavi.cz
- *
+ * 
+ * Upgraded and edited for our custom version of marlin by Houba, Makererslab.cz
  */
 #ifndef LANGUAGE_CZ_H
 #define LANGUAGE_CZ_H
@@ -68,7 +69,7 @@
 #define MSG_SWITCH_PS_OFF                   "Vypnout napajeni"
 #define MSG_EXTRUDE                         "Vytlacit (extr.)"
 #define MSG_RETRACT                         "Zatlacit (retr.)"
-#define MSG_MOVE_AXIS                       "Posunout osy"
+#define MSG_MOVE_AXIS                       "Posunout os"
 #define MSG_LEVEL_BED                       "Vyrovnat podlozku"
 #define MSG_MOVE_X                          "Posunout X"
 #define MSG_MOVE_Y                          "Posunout Y"
@@ -130,6 +131,12 @@
 #define MSG_STOP_PRINT                      "Zastavit tisk"
 #define MSG_CARD_MENU                       "Tisknout z SD"
 #define MSG_NO_CARD                         "Zadna SD karta"
+#define MSG_SETTINGS                        "Nastaveni"
+#define MSG_INFO                            "Info"
+#define MSG_FREE_Z                          "Uvolnit plochu"
+#define MSG_PREHEAT_FIRST                   "Nejprve predehrej trysku"
+#define MSG_LOAD_FILAMENT                   "Vlozit filament"
+#define MSG_UNLOAD_FILAMENT                 "Vysunout Filament"
 #define MSG_DWELL                           "Uspano..."
 #define MSG_USERWAIT                        "Cekani na uziv..."
 #define MSG_RESUMING                        "Obnovovani tisku"
@@ -153,7 +160,7 @@
 #define MSG_ZPROBE_ZOFFSET                  "Z ofset"
 #define MSG_BABYSTEP_X                      "Babystep X"
 #define MSG_BABYSTEP_Y                      "Babystep Y"
-#define MSG_BABYSTEP_Z                      "Babystep Z"
+#define MSG_BABYSTEP_Z                      "Doladeni Z"
 #define MSG_ENDSTOP_ABORT                   "Endstop abort"
 #define MSG_HEATING_FAILED_LCD              "Chyba zahrivani"
 #define MSG_ERR_REDUNDANT_TEMP              "Chyba: REDUNDANTNI TEPLOTA"

@@ -89,6 +89,8 @@ static void lcd_status_screen();
   static void lcd_main_menu();
   static void lcd_tune_menu();
   static void lcd_prepare_menu();
+  static void lcd_settings_menu();
+  static void lcd_info_menu();
   static void lcd_move_menu();
   static void lcd_control_menu();
   static void lcd_control_temperature_menu();
@@ -500,11 +502,9 @@ static void lcd_main_menu() {
   }
   else {
     MENU_ITEM(submenu, MSG_PREPARE, lcd_prepare_menu);
-    #if ENABLED(DELTA_CALIBRATION_MENU)
-      MENU_ITEM(submenu, MSG_DELTA_CALIBRATE, lcd_delta_calibrate_menu);
-    #endif
+    MENU_ITEM(submenu, MSG_CONTROL, lcd_control_menu);
   }
-  MENU_ITEM(submenu, MSG_CONTROL, lcd_control_menu);
+
 
   #if ENABLED(SDSUPPORT)
     if (card.cardOK) {
@@ -529,7 +529,165 @@ static void lcd_main_menu() {
       #endif
     }
   #endif //SDSUPPORT
+  if (movesplanned() || IS_SD_PRINTING) {
+    MENU_ITEM(gcode, MSG_FILAMENTCHANGE, PSTR("M600"));//change filament gcode
+  }
+  MENU_ITEM(submenu, MSG_SETTINGS, lcd_settings_menu);
+  MENU_ITEM(submenu, MSG_INFO, lcd_info_menu);
 
+  END_MENU();
+}
+
+/**
+ *
+ * "Prepare" > "Move Axis" submenu
+ *
+ */
+
+float move_menu_scale;
+
+static void _lcd_move(const char* name, AxisEnum axis, float min, float max) {
+  ENCODER_DIRECTION_NORMAL();
+  if (encoderPosition && movesplanned() <= 3) {
+    refresh_cmd_timeout();
+    current_position[axis] += float((int32_t)encoderPosition) * move_menu_scale;
+    if (min_software_endstops) NOLESS(current_position[axis], min);
+    if (max_software_endstops) NOMORE(current_position[axis], max);
+    line_to_current(axis);
+    lcdDrawUpdate = LCDVIEW_REDRAW_NOW;
+  }
+  encoderPosition = 0;
+  if (lcdDrawUpdate) lcd_implementation_drawedit(name, ftostr31(current_position[axis]));
+  if (LCD_CLICKED) lcd_goto_previous_menu(true);
+}
+#if ENABLED(DELTA)
+  static float delta_clip_radius_2 =  (DELTA_PRINTABLE_RADIUS) * (DELTA_PRINTABLE_RADIUS);
+  static int delta_clip( float a ) { return sqrt(delta_clip_radius_2 - a*a); }
+  static void lcd_move_x() { int clip = delta_clip(current_position[Y_AXIS]); _lcd_move(PSTR(MSG_MOVE_X), X_AXIS, max(sw_endstop_min[X_AXIS], -clip), min(sw_endstop_max[X_AXIS], clip)); }
+  static void lcd_move_y() { int clip = delta_clip(current_position[X_AXIS]); _lcd_move(PSTR(MSG_MOVE_Y), Y_AXIS, max(sw_endstop_min[Y_AXIS], -clip), min(sw_endstop_max[Y_AXIS], clip)); }
+#else
+  static void lcd_move_x() { _lcd_move(PSTR(MSG_MOVE_X), X_AXIS, sw_endstop_min[X_AXIS], sw_endstop_max[X_AXIS]); }
+  static void lcd_move_y() { _lcd_move(PSTR(MSG_MOVE_Y), Y_AXIS, sw_endstop_min[Y_AXIS], sw_endstop_max[Y_AXIS]); }
+#endif
+static void lcd_move_z() { _lcd_move(PSTR(MSG_MOVE_Z), Z_AXIS, sw_endstop_min[Z_AXIS], sw_endstop_max[Z_AXIS]); }
+static void lcd_move_e(
+  #if EXTRUDERS > 1
+    uint8_t e
+  #endif
+) {
+  ENCODER_DIRECTION_NORMAL();
+  #if EXTRUDERS > 1
+    unsigned short original_active_extruder = active_extruder;
+    active_extruder = e;
+  #endif
+  if (encoderPosition && movesplanned() <= 3) {
+    current_position[E_AXIS] += float((int32_t)encoderPosition) * move_menu_scale;
+    line_to_current(E_AXIS);
+    lcdDrawUpdate = LCDVIEW_REDRAW_NOW;
+  }
+  encoderPosition = 0;
+  if (lcdDrawUpdate) {
+    PGM_P pos_label;
+    #if EXTRUDERS == 1
+      pos_label = PSTR(MSG_MOVE_E);
+    #else
+      switch (e) {
+        case 0: pos_label = PSTR(MSG_MOVE_E MSG_MOVE_E1); break;
+        case 1: pos_label = PSTR(MSG_MOVE_E MSG_MOVE_E2); break;
+        #if EXTRUDERS > 2
+          case 2: pos_label = PSTR(MSG_MOVE_E MSG_MOVE_E3); break;
+          #if EXTRUDERS > 3
+            case 3: pos_label = PSTR(MSG_MOVE_E MSG_MOVE_E4); break;
+          #endif //EXTRUDERS > 3
+        #endif //EXTRUDERS > 2
+      }
+    #endif //EXTRUDERS > 1
+    lcd_implementation_drawedit(pos_label, ftostr31(current_position[E_AXIS]));
+  }
+  if (LCD_CLICKED) lcd_goto_previous_menu(true);
+  #if EXTRUDERS > 1
+    active_extruder = original_active_extruder;
+  #endif
+}
+
+#if EXTRUDERS > 1
+  static void lcd_move_e0() { lcd_move_e(0); }
+  static void lcd_move_e1() { lcd_move_e(1); }
+  #if EXTRUDERS > 2
+    static void lcd_move_e2() { lcd_move_e(2); }
+    #if EXTRUDERS > 3
+      static void lcd_move_e3() { lcd_move_e(3); }
+    #endif
+  #endif
+#endif // EXTRUDERS > 1
+
+/**
+ *
+ * "Prepare" > "Move Xmm" > "Move XYZ" submenu
+ *
+ */
+
+#if ENABLED(DELTA) || ENABLED(SCARA)
+  #define _MOVE_XYZ_ALLOWED (axis_homed[X_AXIS] && axis_homed[Y_AXIS] && axis_homed[Z_AXIS])
+#else
+  #define _MOVE_XYZ_ALLOWED true
+#endif
+
+static void _lcd_move_menu_axis() {
+  START_MENU();
+  MENU_ITEM(back, MSG_MOVE_AXIS);
+
+  if (_MOVE_XYZ_ALLOWED) {
+    MENU_ITEM(submenu, MSG_MOVE_X, lcd_move_x);
+    MENU_ITEM(submenu, MSG_MOVE_Y, lcd_move_y);
+  }
+  if (move_menu_scale < 10.0) {
+    if (_MOVE_XYZ_ALLOWED) MENU_ITEM(submenu, MSG_MOVE_Z, lcd_move_z);
+    #if EXTRUDERS == 1
+      MENU_ITEM(submenu, MSG_MOVE_E, lcd_move_e);
+    #else
+      MENU_ITEM(submenu, MSG_MOVE_E MSG_MOVE_E1, lcd_move_e0);
+      MENU_ITEM(submenu, MSG_MOVE_E MSG_MOVE_E2, lcd_move_e1);
+      #if EXTRUDERS > 2
+        MENU_ITEM(submenu, MSG_MOVE_E MSG_MOVE_E3, lcd_move_e2);
+        #if EXTRUDERS > 3
+          MENU_ITEM(submenu, MSG_MOVE_E MSG_MOVE_E4, lcd_move_e3);
+        #endif
+      #endif
+    #endif // EXTRUDERS > 1
+  }
+  END_MENU();
+}
+
+static void lcd_move_menu_10mm() {
+  move_menu_scale = 10.0;
+  _lcd_move_menu_axis();
+}
+static void lcd_move_menu_1mm() {
+  move_menu_scale = 1.0;
+  _lcd_move_menu_axis();
+}
+static void lcd_move_menu_01mm() {
+  move_menu_scale = 0.1;
+  _lcd_move_menu_axis();
+}
+
+/**
+ *
+ * "Prepare" > "Move Axis" submenu
+ *
+ */
+
+static void lcd_move_menu() {
+  START_MENU();
+  MENU_ITEM(back, MSG_PREPARE);
+
+  if (_MOVE_XYZ_ALLOWED)
+    MENU_ITEM(submenu, MSG_MOVE_10MM, lcd_move_menu_10mm);
+
+  MENU_ITEM(submenu, MSG_MOVE_1MM, lcd_move_menu_1mm);
+  MENU_ITEM(submenu, MSG_MOVE_01MM, lcd_move_menu_01mm);
+  //TODO:X,Y,Z,E
   END_MENU();
 }
 
@@ -644,11 +802,6 @@ static void lcd_tune_menu() {
   //
   MENU_ITEM(back, MSG_MAIN);
 
-  //
-  // Speed:
-  //
-  MENU_ITEM_EDIT(int3, MSG_SPEED, &feedrate_multiplier, 10, 999);
-
   // Manual bed leveling, Bed Z:
   #if ENABLED(MANUAL_BED_LEVELING)
     MENU_ITEM_EDIT(float43, MSG_BED_Z, &mbl.z_offset, -1, 1);
@@ -730,6 +883,11 @@ static void lcd_tune_menu() {
   #endif //EXTRUDERS > 1
 
   //
+  // Speed:
+  //
+  MENU_ITEM_EDIT(int3, MSG_SPEED, &feedrate_multiplier, 10, 999);
+
+  //
   // Babystep X:
   // Babystep Y:
   // Babystep Z:
@@ -742,12 +900,14 @@ static void lcd_tune_menu() {
     MENU_ITEM(submenu, MSG_BABYSTEP_Z, lcd_babystep_z);
   #endif
 
+  //sem vypnuti LEDky
+
   //
   // Change filament
   //
-  #if ENABLED(FILAMENTCHANGEENABLE)
-     MENU_ITEM(gcode, MSG_FILAMENTCHANGE, PSTR("M600"));
-  #endif
+  //#if ENABLED(FILAMENTCHANGEENABLE)
+  //   MENU_ITEM(gcode, MSG_FILAMENTCHANGE, PSTR("M600"));
+  //#endif
 
   END_MENU();
 }
@@ -757,6 +917,16 @@ static void lcd_tune_menu() {
  * "Prepare" submenu items
  *
  */
+void lcd_filament_load(){
+  if (current_temperature[0] < EXTRUDE_MINTEMP){
+    lcd_implementation_clear();
+   // _enqueuecommand("M117 MSG_PREHEAT_FIRST");
+  }
+  else{
+    //_enqueuecommand("M83\nG1 E70 F400\nG1 E40 F100\nM82");
+  }
+}
+ 
 void _lcd_preheat(int endnum, const float temph, const float tempb, const int fan) {
   if (temph > 0) setTargetHotend(temph, endnum);
   #if TEMP_SENSOR_BED != 0
@@ -1096,75 +1266,97 @@ static void lcd_prepare_menu() {
   MENU_ITEM(back, MSG_MAIN);
 
   //
+  // Preheat PLA
+  // Preheat ABS
+  //
+  #if TEMP_SENSOR_0 != 0
+    #if TEMP_SENSOR_1 != 0 || TEMP_SENSOR_2 != 0 || TEMP_SENSOR_3 != 0 || TEMP_SENSOR_BED != 0
+      MENU_ITEM(function, MSG_PREHEAT_PLA_ALL, lcd_preheat_pla0);
+      MENU_ITEM(function, MSG_PREHEAT_ABS_ALL, lcd_preheat_abs0);
+    #else
+      MENU_ITEM(function, MSG_PREHEAT_PLA, lcd_preheat_pla0);
+      MENU_ITEM(function, MSG_PREHEAT_ABS, lcd_preheat_abs0);
+    #endif
+  #endif
+ //
+  // Cooldown
+  //
+  MENU_ITEM(function, MSG_COOLDOWN, lcd_cooldown);
+
+  //pridat nejaky omezeni aby se nedalo loadovat bez zahrati
+
+    // FILAMENT LOAD
+    MENU_ITEM(gcode, MSG_LOAD_FILAMENT, PSTR("M83\nG1 E70 F400\nG1 E30 F100"));
+     //MENU_ITEM(function, MSG_LOAD_FILAMENT, lcd_filament_load);
+
+    // FILAMENT UNLOAD
+
+    MENU_ITEM(gcode, MSG_UNLOAD_FILAMENT,  PSTR("M83\nG1 E-80 F400"));
+    //MENU_ITEM(function, MSG_UNLOAD_FILAMENT,  lcd_filament_unload);
+    
+
+
+    
+  //
+  // Move Z Axis
+  //
+  move_menu_scale = 1;
+  MENU_ITEM(submenu, MSG_MOVE_Z, lcd_move_z);
+
+  //
   // Auto Home
   //
-  MENU_ITEM(gcode, MSG_AUTO_HOME, PSTR("G28"));
+  //MENU_ITEM(gcode, MSG_AUTO_HOME, PSTR("G28"));
 
   //
   // Set Home Offsets
   //
-  MENU_ITEM(function, MSG_SET_HOME_OFFSETS, lcd_set_home_offsets);
+  //MENU_ITEM(function, MSG_SET_HOME_OFFSETS, lcd_set_home_offsets);
   //MENU_ITEM(gcode, MSG_SET_ORIGIN, PSTR("G92 X0 Y0 Z0"));
 
   //
   // Level Bed
   //
-  #if ENABLED(AUTO_BED_LEVELING_FEATURE)
-    MENU_ITEM(gcode, MSG_LEVEL_BED,
-      axis_homed[X_AXIS] && axis_homed[Y_AXIS] ? PSTR("G29") : PSTR("G28\nG29")
-    );
-  #elif ENABLED(MANUAL_BED_LEVELING)
-    MENU_ITEM(submenu, MSG_LEVEL_BED, lcd_level_bed);
-  #endif
-
-  //
-  // Move Axis
-  //
-  MENU_ITEM(submenu, MSG_MOVE_AXIS, lcd_move_menu);
+  //#if ENABLED(AUTO_BED_LEVELING_FEATURE)
+  //   MENU_ITEM(gcode, MSG_LEVEL_BED,
+  //     axis_homed[X_AXIS] && axis_homed[Y_AXIS] ? PSTR("G29") : PSTR("G28\nG29")
+  //   );
+  // #elif ENABLED(MANUAL_BED_LEVELING)
+  //   MENU_ITEM(submenu, MSG_LEVEL_BED, lcd_level_bed);
+  // #endif
 
   //
   // Disable Steppers
   //
   MENU_ITEM(gcode, MSG_DISABLE_STEPPERS, PSTR("M84"));
 
-  //
-  // Preheat PLA
-  // Preheat ABS
-  //
-  #if TEMP_SENSOR_0 != 0
-    #if TEMP_SENSOR_1 != 0 || TEMP_SENSOR_2 != 0 || TEMP_SENSOR_3 != 0 || TEMP_SENSOR_BED != 0
-      MENU_ITEM(submenu, MSG_PREHEAT_PLA, lcd_preheat_pla_menu);
-      MENU_ITEM(submenu, MSG_PREHEAT_ABS, lcd_preheat_abs_menu);
-    #else
-      MENU_ITEM(function, MSG_PREHEAT_PLA, lcd_preheat_pla0);
-      MENU_ITEM(function, MSG_PREHEAT_ABS, lcd_preheat_abs0);
-    #endif
-  #endif
 
-  //
-  // Cooldown
-  //
-  MENU_ITEM(function, MSG_COOLDOWN, lcd_cooldown);
+  
 
   //
   // Switch power on/off
   //
-  #if HAS_POWER_SWITCH
-    if (powersupply)
-      MENU_ITEM(gcode, MSG_SWITCH_PS_OFF, PSTR("M81"));
-    else
-      MENU_ITEM(gcode, MSG_SWITCH_PS_ON, PSTR("M80"));
-  #endif
+  // #if HAS_POWER_SWITCH
+  //   if (powersupply)
+  //     MENU_ITEM(gcode, MSG_SWITCH_PS_OFF, PSTR("M81"));
+  //   else
+  //     MENU_ITEM(gcode, MSG_SWITCH_PS_ON, PSTR("M80"));
+  // #endif
 
   //
   // Autostart
   //
-  #if ENABLED(SDSUPPORT) && ENABLED(MENU_ADDAUTOSTART)
-    MENU_ITEM(function, MSG_AUTOSTART, lcd_autostart_sd);
-  #endif
+  // #if ENABLED(SDSUPPORT) && ENABLED(MENU_ADDAUTOSTART)
+  //   MENU_ITEM(function, MSG_AUTOSTART, lcd_autostart_sd);
+  // #endif
 
   END_MENU();
 }
+
+
+
+
+
 
 #if ENABLED(DELTA_CALIBRATION_MENU)
 
@@ -1183,164 +1375,11 @@ static void lcd_prepare_menu() {
 
 /**
  *
- * "Prepare" > "Move Axis" submenu
+ * "settings" submenu
  *
  */
 
-float move_menu_scale;
-
-static void _lcd_move(const char* name, AxisEnum axis, float min, float max) {
-  ENCODER_DIRECTION_NORMAL();
-  if (encoderPosition && movesplanned() <= 3) {
-    refresh_cmd_timeout();
-    current_position[axis] += float((int32_t)encoderPosition) * move_menu_scale;
-    if (min_software_endstops) NOLESS(current_position[axis], min);
-    if (max_software_endstops) NOMORE(current_position[axis], max);
-    line_to_current(axis);
-    lcdDrawUpdate = LCDVIEW_REDRAW_NOW;
-  }
-  encoderPosition = 0;
-  if (lcdDrawUpdate) lcd_implementation_drawedit(name, ftostr31(current_position[axis]));
-  if (LCD_CLICKED) lcd_goto_previous_menu(true);
-}
-#if ENABLED(DELTA)
-  static float delta_clip_radius_2 =  (DELTA_PRINTABLE_RADIUS) * (DELTA_PRINTABLE_RADIUS);
-  static int delta_clip( float a ) { return sqrt(delta_clip_radius_2 - a*a); }
-  static void lcd_move_x() { int clip = delta_clip(current_position[Y_AXIS]); _lcd_move(PSTR(MSG_MOVE_X), X_AXIS, max(sw_endstop_min[X_AXIS], -clip), min(sw_endstop_max[X_AXIS], clip)); }
-  static void lcd_move_y() { int clip = delta_clip(current_position[X_AXIS]); _lcd_move(PSTR(MSG_MOVE_Y), Y_AXIS, max(sw_endstop_min[Y_AXIS], -clip), min(sw_endstop_max[Y_AXIS], clip)); }
-#else
-  static void lcd_move_x() { _lcd_move(PSTR(MSG_MOVE_X), X_AXIS, sw_endstop_min[X_AXIS], sw_endstop_max[X_AXIS]); }
-  static void lcd_move_y() { _lcd_move(PSTR(MSG_MOVE_Y), Y_AXIS, sw_endstop_min[Y_AXIS], sw_endstop_max[Y_AXIS]); }
-#endif
-static void lcd_move_z() { _lcd_move(PSTR(MSG_MOVE_Z), Z_AXIS, sw_endstop_min[Z_AXIS], sw_endstop_max[Z_AXIS]); }
-static void lcd_move_e(
-  #if EXTRUDERS > 1
-    uint8_t e
-  #endif
-) {
-  ENCODER_DIRECTION_NORMAL();
-  #if EXTRUDERS > 1
-    unsigned short original_active_extruder = active_extruder;
-    active_extruder = e;
-  #endif
-  if (encoderPosition && movesplanned() <= 3) {
-    current_position[E_AXIS] += float((int32_t)encoderPosition) * move_menu_scale;
-    line_to_current(E_AXIS);
-    lcdDrawUpdate = LCDVIEW_REDRAW_NOW;
-  }
-  encoderPosition = 0;
-  if (lcdDrawUpdate) {
-    PGM_P pos_label;
-    #if EXTRUDERS == 1
-      pos_label = PSTR(MSG_MOVE_E);
-    #else
-      switch (e) {
-        case 0: pos_label = PSTR(MSG_MOVE_E MSG_MOVE_E1); break;
-        case 1: pos_label = PSTR(MSG_MOVE_E MSG_MOVE_E2); break;
-        #if EXTRUDERS > 2
-          case 2: pos_label = PSTR(MSG_MOVE_E MSG_MOVE_E3); break;
-          #if EXTRUDERS > 3
-            case 3: pos_label = PSTR(MSG_MOVE_E MSG_MOVE_E4); break;
-          #endif //EXTRUDERS > 3
-        #endif //EXTRUDERS > 2
-      }
-    #endif //EXTRUDERS > 1
-    lcd_implementation_drawedit(pos_label, ftostr31(current_position[E_AXIS]));
-  }
-  if (LCD_CLICKED) lcd_goto_previous_menu(true);
-  #if EXTRUDERS > 1
-    active_extruder = original_active_extruder;
-  #endif
-}
-
-#if EXTRUDERS > 1
-  static void lcd_move_e0() { lcd_move_e(0); }
-  static void lcd_move_e1() { lcd_move_e(1); }
-  #if EXTRUDERS > 2
-    static void lcd_move_e2() { lcd_move_e(2); }
-    #if EXTRUDERS > 3
-      static void lcd_move_e3() { lcd_move_e(3); }
-    #endif
-  #endif
-#endif // EXTRUDERS > 1
-
-/**
- *
- * "Prepare" > "Move Xmm" > "Move XYZ" submenu
- *
- */
-
-#if ENABLED(DELTA) || ENABLED(SCARA)
-  #define _MOVE_XYZ_ALLOWED (axis_homed[X_AXIS] && axis_homed[Y_AXIS] && axis_homed[Z_AXIS])
-#else
-  #define _MOVE_XYZ_ALLOWED true
-#endif
-
-static void _lcd_move_menu_axis() {
-  START_MENU();
-  MENU_ITEM(back, MSG_MOVE_AXIS);
-
-  if (_MOVE_XYZ_ALLOWED) {
-    MENU_ITEM(submenu, MSG_MOVE_X, lcd_move_x);
-    MENU_ITEM(submenu, MSG_MOVE_Y, lcd_move_y);
-  }
-  if (move_menu_scale < 10.0) {
-    if (_MOVE_XYZ_ALLOWED) MENU_ITEM(submenu, MSG_MOVE_Z, lcd_move_z);
-    #if EXTRUDERS == 1
-      MENU_ITEM(submenu, MSG_MOVE_E, lcd_move_e);
-    #else
-      MENU_ITEM(submenu, MSG_MOVE_E MSG_MOVE_E1, lcd_move_e0);
-      MENU_ITEM(submenu, MSG_MOVE_E MSG_MOVE_E2, lcd_move_e1);
-      #if EXTRUDERS > 2
-        MENU_ITEM(submenu, MSG_MOVE_E MSG_MOVE_E3, lcd_move_e2);
-        #if EXTRUDERS > 3
-          MENU_ITEM(submenu, MSG_MOVE_E MSG_MOVE_E4, lcd_move_e3);
-        #endif
-      #endif
-    #endif // EXTRUDERS > 1
-  }
-  END_MENU();
-}
-
-static void lcd_move_menu_10mm() {
-  move_menu_scale = 10.0;
-  _lcd_move_menu_axis();
-}
-static void lcd_move_menu_1mm() {
-  move_menu_scale = 1.0;
-  _lcd_move_menu_axis();
-}
-static void lcd_move_menu_01mm() {
-  move_menu_scale = 0.1;
-  _lcd_move_menu_axis();
-}
-
-/**
- *
- * "Prepare" > "Move Axis" submenu
- *
- */
-
-static void lcd_move_menu() {
-  START_MENU();
-  MENU_ITEM(back, MSG_PREPARE);
-
-  if (_MOVE_XYZ_ALLOWED)
-    MENU_ITEM(submenu, MSG_MOVE_10MM, lcd_move_menu_10mm);
-
-  MENU_ITEM(submenu, MSG_MOVE_1MM, lcd_move_menu_1mm);
-  MENU_ITEM(submenu, MSG_MOVE_01MM, lcd_move_menu_01mm);
-  //TODO:X,Y,Z,E
-  END_MENU();
-}
-
-/**
- *
- * "Control" submenu
- *
- */
-
-static void lcd_control_menu() {
+static void lcd_settings_menu() {
   START_MENU();
   MENU_ITEM(back, MSG_MAIN);
   MENU_ITEM(submenu, MSG_TEMPERATURE, lcd_control_temperature_menu);
@@ -1359,6 +1398,118 @@ static void lcd_control_menu() {
     MENU_ITEM(function, MSG_LOAD_EPROM, Config_RetrieveSettings);
   #endif
   MENU_ITEM(function, MSG_RESTORE_FAILSAFE, Config_ResetDefault);
+  END_MENU();
+}
+
+/**
+ *
+ * "info" submenu
+ *
+ */
+
+static void lcd_info_menu() {
+  START_MENU();
+  MENU_ITEM(back, "Parkinson");
+  MENU_ITEM(back, "www.Makerslab.cz");
+  MENU_ITEM(back, "v fw 1_0_0");
+  END_MENU();
+}
+
+/**
+ *
+ * "Control" submenu
+ *
+ */
+
+static void lcd_control_menu() {
+  START_MENU();
+  MENU_ITEM(back, MSG_MAIN);
+  //heating
+  
+  //
+  // Nozzle:
+  // Nozzle [1-4]:
+  //
+  #if EXTRUDERS == 1
+    #if TEMP_SENSOR_0 != 0
+      MENU_MULTIPLIER_ITEM_EDIT_CALLBACK(int3, MSG_NOZZLE, &target_temperature[0], 0, HEATER_0_MAXTEMP - 15, watch_temp_callback_E0);
+    #endif
+  #else //EXTRUDERS > 1
+    #if TEMP_SENSOR_0 != 0
+      MENU_MULTIPLIER_ITEM_EDIT_CALLBACK(int3, MSG_NOZZLE MSG_N1, &target_temperature[0], 0, HEATER_0_MAXTEMP - 15, watch_temp_callback_E0);
+    #endif
+    #if TEMP_SENSOR_1 != 0
+      MENU_MULTIPLIER_ITEM_EDIT_CALLBACK(int3, MSG_NOZZLE MSG_N2, &target_temperature[1], 0, HEATER_1_MAXTEMP - 15, watch_temp_callback_E1);
+    #endif
+    #if EXTRUDERS > 2
+      #if TEMP_SENSOR_2 != 0
+        MENU_MULTIPLIER_ITEM_EDIT_CALLBACK(int3, MSG_NOZZLE MSG_N3, &target_temperature[2], 0, HEATER_2_MAXTEMP - 15, watch_temp_callback_E2);
+      #endif
+      #if EXTRUDERS > 3
+        #if TEMP_SENSOR_3 != 0
+          MENU_MULTIPLIER_ITEM_EDIT_CALLBACK(int3, MSG_NOZZLE MSG_N4, &target_temperature[3], 0, HEATER_3_MAXTEMP - 15, watch_temp_callback_E3);
+        #endif
+      #endif // EXTRUDERS > 3
+    #endif // EXTRUDERS > 2
+  #endif // EXTRUDERS > 1
+
+  //
+  // Bed:
+  //
+  #if TEMP_SENSOR_BED != 0
+    MENU_MULTIPLIER_ITEM_EDIT(int3, MSG_BED, &target_temperature_bed, 0, BED_MAXTEMP - 15);
+  #endif
+
+  //
+  // Fan Speed:
+  //
+  #if FAN_COUNT > 0
+    #if HAS_FAN0
+      #if FAN_COUNT > 1
+        #define MSG_1ST_FAN_SPEED MSG_FAN_SPEED " 1"
+      #else
+        #define MSG_1ST_FAN_SPEED MSG_FAN_SPEED
+      #endif
+      MENU_MULTIPLIER_ITEM_EDIT(int3, MSG_1ST_FAN_SPEED, &fanSpeeds[0], 0, 255);
+    #endif
+    #if HAS_FAN1
+      MENU_MULTIPLIER_ITEM_EDIT(int3, MSG_FAN_SPEED " 2", &fanSpeeds[1], 0, 255);
+    #endif
+    #if HAS_FAN2
+      MENU_MULTIPLIER_ITEM_EDIT(int3, MSG_FAN_SPEED " 3", &fanSpeeds[2], 0, 255);
+    #endif
+  #endif // FAN_COUNT > 0
+
+  
+  //MENU_ITEM(submenu, MSG_TEMPERATURE, lcd_control_temperature_menu);
+  //MENU_ITEM(submenu, MSG_MOTION, lcd_control_motion_menu);
+  //MENU_ITEM(submenu, MSG_VOLUMETRIC, lcd_control_volumetric_menu);
+ 
+  //posun os
+  MENU_ITEM(submenu, MSG_MOVE_AXIS, lcd_move_menu_1mm);
+
+  //home all
+  
+  MENU_ITEM(gcode, MSG_AUTO_HOME, PSTR("G28"));
+  
+  //doladeni z
+  MENU_ITEM(submenu, MSG_BABYSTEP_Z, lcd_babystep_z);
+  //zapnout ledku
+
+  
+  
+  #if ENABLED(HAS_LCD_CONTRAST)
+    //MENU_ITEM_EDIT(int3, MSG_CONTRAST, &lcd_contrast, 0, 63);
+    MENU_ITEM(submenu, MSG_CONTRAST, lcd_set_contrast);
+  #endif
+  #if ENABLED(FWRETRACT)
+    MENU_ITEM(submenu, MSG_RETRACT, lcd_control_retract_menu);
+  #endif
+  #if ENABLED(EEPROM_SETTINGS)
+    MENU_ITEM(function, MSG_STORE_EPROM, Config_StoreSettings);
+    MENU_ITEM(function, MSG_LOAD_EPROM, Config_RetrieveSettings);
+  #endif
+  //MENU_ITEM(function, MSG_RESTORE_FAILSAFE, Config_ResetDefault);
   END_MENU();
 }
 

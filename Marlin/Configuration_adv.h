@@ -418,9 +418,9 @@
 // Babystepping enables the user to control the axis in tiny amounts, independently from the normal printing process
 // it can e.g. be used to change z-positions in the print startup phase in real-time
 // does not respect endstops!
-//#define BABYSTEPPING
+#define BABYSTEPPING
 #if ENABLED(BABYSTEPPING)
-  #define BABYSTEP_XY  //not only z, but also XY in the menu. more clutter, more functions
+  //#define BABYSTEP_XY  //not only z, but also XY in the menu. more clutter, more functions
                        //not implemented for deltabots!
   #define BABYSTEP_INVERT_Z false  //true for inverse movements in Z
   #define BABYSTEP_MULTIPLICATOR 1 //faster movements
@@ -506,13 +506,13 @@ const unsigned int dropsegments = 5; //everything with less than this number of 
 
 // Add support for experimental filament exchange support M600; requires display
 #if ENABLED(ULTIPANEL)
-  //#define FILAMENTCHANGEENABLE
+  #define FILAMENTCHANGEENABLE
   #if ENABLED(FILAMENTCHANGEENABLE)
     #define FILAMENTCHANGE_XPOS 3
     #define FILAMENTCHANGE_YPOS 3
     #define FILAMENTCHANGE_ZADD 10
-    #define FILAMENTCHANGE_FIRSTRETRACT -2
-    #define FILAMENTCHANGE_FINALRETRACT -100
+    #define FILAMENTCHANGE_FIRSTRETRACT -10
+    #define FILAMENTCHANGE_FINALRETRACT -140
     #define AUTO_FILAMENT_CHANGE                //This extrude filament until you press the button on LCD
     #define AUTO_FILAMENT_CHANGE_LENGTH 0.04    //Extrusion length on automatic extrusion loop
     #define AUTO_FILAMENT_CHANGE_FEEDRATE 300   //Extrusion feedrate (mm/min) on automatic extrusion loop

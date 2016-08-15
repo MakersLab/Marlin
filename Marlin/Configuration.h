@@ -511,6 +511,21 @@ const bool Z_MIN_PROBE_ENDSTOP_INVERTING = false; // set to true to invert the l
   #define FILAMENT_RUNOUT_SCRIPT "M600"
 #endif
 
+
+/*------------------------------------
+    LOAD/UNLOAD FILAMENT SETTINGS
+*------------------------------------*/
+
+// Load filament commands
+#define LOAD_FILAMENT_0 "M83"
+#define LOAD_FILAMENT_1 "G1 E70 F400"
+#define LOAD_FILAMENT_2 "G1 E40 F100"
+
+// Unload filament commands
+#define UNLOAD_FILAMENT_0 "M83"
+#define UNLOAD_FILAMENT_1 "G1 E-80 F400"
+
+
 //===========================================================================
 //============================ Mesh Bed Leveling ============================
 //===========================================================================
